@@ -9,6 +9,51 @@ reviewControllers.factory('MyData', function(){
 	};
 });
 
+
+// Fetch image from flickr service.
+var fetchImages = function ($http, callback){
+	
+	// First get properties file.
+	$http.get('flickr-key.json').then(function (properties){
+
+		var quantity = properties.data.quantity,
+			api_key = properties.data.flickrKey,
+			endpoint = properties.data.endpoint,
+			format = properties.data.format,
+			url = endpoint + 'api_key=' + api_key + '&per_page=' + quantity + '&format=' + format;
+
+		// make GET call
+		$http.get(url)
+		.success(function (data) {
+
+			var photo,
+				images = [],
+				photos = data.photos.photo;
+
+			for (var i = photos.length - 1; i >= 0; i--) {
+				var rootUrl = 'https://farm' + photos[i].farm + '.staticflickr.com/' + photos[i].server + '/' + photos[i].id + '_' + photos[i].secret;
+				photo = {
+					description: '',
+					clientId: photos[i].owner,
+					title: photos[i].title,
+					url: rootUrl + '_z.jpg',
+					thumbnail: rootUrl + '_q.jpg',
+					target: 'https://www.flickr.com/photos/' + photos[i].owner + '/' + photos[i].id
+				};
+
+				images.push(photo);
+			}
+
+			callback(true, images);
+		})
+		.error(function (data){
+			console.log('Error in flickr call.');
+			callback(false, []);
+		});
+
+	});
+};
+
 reviewControllers.controller('reviewController', function($http, $scope, MyData){
 	
 	var count = 0,
@@ -16,39 +61,15 @@ reviewControllers.controller('reviewController', function($http, $scope, MyData)
 	$scope.loadedImages = MyData.imagesReviewed;
 	this.hasPhotos = false;
 	this.finishReviews = false;
-
-	var fetchImages = function ($http){
-
-		var url = 'https://api.flickr.com/services/rest/?method=flickr.interestingness.getList&api_key=17592ab295bfffea2dbfac2566bb9cd0&per_page=9&format=json&nojsoncallback=1';
-
-		$http.get(url)
-		.success(function (data) {
-
-			var photo;
-			for (var i = data.photos.photo.length - 1; i >= 0; i--) {
-				var rootUrl = 'https://farm' + data.photos.photo[i].farm + '.staticflickr.com/' + data.photos.photo[i].server + '/' + data.photos.photo[i].id + '_' + data.photos.photo[i].secret;
-				photo = {
-					description: '',
-					clientId: data.photos.photo[i].owner,
-					title: data.photos.photo[i].title,
-					url: rootUrl + '_z.jpg',
-					thumbnail: rootUrl + '_q.jpg',
-					target: 'https://www.flickr.com/photos/' + data.photos.photo[i].owner + '/' + data.photos.photo[i].id
-				};
-
-				$scope.loadedImages.push(photo);
-			}
-
-			console.log('$scope.loadedImages: ' + $scope.loadedImages.length);
-			review.image = $scope.loadedImages[0];
-			review.hasPhotos = true;
-		})
-		.error(function (data){
-			console.log('error in get call.');
-		});
-	};
 	
-	fetchImages($http);
+	fetchImages($http, function(hasPhotos, images) {
+		$scope.loadedImages.push.apply($scope.loadedImages, images);
+		review.hasPhotos = hasPhotos;
+		if(images.length > 0){
+			review.image = $scope.loadedImages[0];
+		}
+	    
+	});
 
 	this.accept = function(image){
 		image.accepted = true;
@@ -78,7 +99,7 @@ reviewControllers.controller('reviewController', function($http, $scope, MyData)
 reviewControllers.controller('reportController', function($scope, MyData){
 	// show image report.
 
-	//console.log('report: ' + MyData.imagesReviewed);
+	console.log('report, number of images: ' + MyData.imagesReviewed.length);
 	$scope.imagesReviewed =  MyData.imagesReviewed;
 
 	$scope.sendReport = function (value) {
